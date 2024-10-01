@@ -24,10 +24,51 @@ window.resizable(False, False)
 taskbar = tk.Frame(window, height=40)
 taskbar.grid(sticky="w")
 
+stopped = True
+def stop_simulation():
+    global stopped
+    stopped = True
+    print("Simulation Stopped")
 
 def start_timer():
-    update_time()
+    global stopped
+    stopped = False
 
+    print("Simulation Started")
+    run_simulation()
+
+
+def run_simulation():
+    start_time = time.time()
+    update_time()
+    # history_df = pd.DataFrame(columns=['time', 'bulk_a_comp', 'reactor_temp', 'jacket_temp_out'])
+
+    bulk_comp_a = 0
+    reactor_temp = 300
+    temperate_jacket_out = 300
+
+    sol = scipy.integrate.solve_ivp(system_of_equations, [0, 1], [bulk_comp_a, reactor_temp, temperate_jacket_out], args=(feed_flow,))
+    history_df = pd.DataFrame(
+        {'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})
+
+    previous_time_step = 1
+
+    for i in range(0, 1000000):
+        sol = scipy.integrate.solve_ivp(system_of_equations, [0, 1],
+                                        [history_df['bulk_a_comp'].iloc[-1], history_df['reactor_temp'].iloc[-1],
+                                         history_df['jacket_temp_out'].iloc[-1]], args=(feed_flow,))
+        history_df = pd.concat([history_df, pd.DataFrame(
+            {'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})])
+        previous_time_step += 1
+        print(history_df.tail(1))
+
+        reactor_temp_indicator.set(str(round(sol.y[1][-1], 2)) + " K")
+        cool_temp_out_indicator.set(str(round(sol.y[2][-1], 2)) + " K")
+        exit_comp_indicator.set(str(round(sol.y[0][-1], 2)) + " mol / m^3")
+        time.sleep(0.01)
+        window.update()
+        if stopped:
+            break
 
 def update_time():
     elapsed_time = str(int(time.time() - start_time))  # Get the number of seconds since the start
@@ -35,6 +76,61 @@ def update_time():
     time_var.set(clock)  # Update the time_var with the new time
     # print(elapsed_time)
     window.after(1000, update_time)  # Schedule the function to be called again after 1 second
+
+
+
+
+def open_f101_valve():
+
+    def set_flow_rate():
+        global feed_flow
+        flow_rate = fc101_flow_entry.get()
+        print("Flow Rate Set to: ", flow_rate)
+        flow101_indicator.set(flow_rate)
+        feed_flow = float(flow_rate)
+        # fc101_control_window.destroy()
+
+    print("Opening FC101 Valve Control Window")
+    fc101_control_window = tk.Toplevel(window)
+
+    fc101_control_window.title("FC101 Control")
+    fc101_control_window.geometry("400x400")
+    fc101_control_window.resizable(False, False)
+
+    fc101_flow_label = tk.Label(fc101_control_window, text="Flow Rate (m^3/s)", font="Arial 12 bold")
+    fc101_flow_label.grid(row=0, column=0)
+
+    fc101_flow_entry = tk.Entry(fc101_control_window, font="Arial 12 bold")
+    fc101_flow_entry.grid(row=0, column=1)
+
+    fc101_set_button = tk.Button(fc101_control_window, text="Set", font="Arial 12 bold", command=set_flow_rate)
+    fc101_set_button.grid(row=1, column=0, columnspan=2)
+
+def open_f100_valve():
+
+    def set_flow_rate():
+        global feed_flow
+        flow_rate = fc100_flow_entry.get()
+        print("Flow Rate Set to: ", flow_rate)
+        flow100_indicator.set(flow_rate)
+        feed_flow = float(flow_rate)
+        # fc101_control_window.destroy()
+
+    print("Opening FC100 Valve Control Window")
+    fc100_control_window = tk.Toplevel(window)
+
+    fc100_control_window.title("FC101 Control")
+    fc100_control_window.geometry("400x400")
+    fc100_control_window.resizable(False, False)
+
+    fc100_flow_label = tk.Label(fc100_control_window, text="Flow Rate (m^3/s)", font="Arial 12 bold")
+    fc100_flow_label.grid(row=0, column=0)
+
+    fc100_flow_entry = tk.Entry(fc100_control_window, font="Arial 12 bold")
+    fc100_flow_entry.grid(row=0, column=1)
+
+    fc100_set_button = tk.Button(fc100_control_window, text="Set", font="Arial 12 bold", command=set_flow_rate)
+    fc100_set_button.grid(row=1, column=0, columnspan=2)
 
 
 file_button = tk.Button(taskbar, text="File", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",)
@@ -50,7 +146,8 @@ start_button = tk.Button(taskbar, text="Start", width=8, height=2, bg="white", f
                          command=start_timer)
 start_button.grid(row=0, column=2, sticky="w")
 
-stop_button = tk.Button(taskbar, text="Stop", width=8, height=2, bg="white", fg="black", font="Arial 12 bold")
+stop_button = tk.Button(taskbar, text="Stop", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
+                        command=stop_simulation)
 stop_button.grid(row=0, column=3, sticky="w")
 
 help_button = tk.Button(taskbar, text="Help", width=8, height=2, bg="white", fg="black", font="Arial 12 bold")
@@ -82,11 +179,11 @@ diagram = tk.Label(frame, image=photo)
 diagram.grid()
 
 fc100_button = tk.Button(frame, text="FC100", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
-                    relief="raised", borderwidth=2)
+                    relief="raised", borderwidth=2, command=open_f100_valve)
 fc100_button.place(x=20, y=285)
 
 fc101_button = tk.Button(frame, text="FC101", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
-                    relief="raised", borderwidth=2)
+                    relief="raised", borderwidth=2, command=open_f101_valve)
 fc101_button.place(x=500, y=115)
 
 # fc102_button = tk.Button(frame, text="FC102", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
@@ -124,7 +221,7 @@ exit_temp_label = tk.Label(frame, textvariable=exit_temp_indicator, font="Arial 
 exit_temp_label.place(x=570, y=550)
 
 level_indicator = tk.StringVar()
-level_indicator.set("0")
+level_indicator.set("CONSTANT")
 level_label = tk.Label(frame, textvariable=level_indicator, font="Arial 12 bold")
 level_label.place(x=450, y=500)
 
@@ -159,7 +256,7 @@ jack_feed_flow = 0.1 # m^3 / s
 
 # jacket_volume = 0.1 # m^3
 
-def system_of_equations(t,y):
+def system_of_equations(t,y, feed_flow):
     # y[0] = bulk_a_comp
     # y[1] = reactor_temp
     # y[2] = temperature_jacket_out
@@ -172,7 +269,7 @@ def system_of_equations(t,y):
     area_of_transfer = 0.1 # m^2
 
     # constants that later should be dynamically changed
-    feed_flow = 0.1 # m^3 / s
+    feed_flow = feed_flow # m^3 / s
     feed_a_comp = 0.5 # mol / m^3
     feed_temp = 300 # K
 
@@ -201,8 +298,6 @@ def system_of_equations(t,y):
 
     return [dCadt, dTdt, dTjdt]
 
-sol = scipy.integrate.solve_ivp(system_of_equations, [0, 1], [0, 300, 300])
-
 flow101_indicator.set(0.1)
 flow100_indicator.set(0.1)
 cw_temp_indicator.set(300)
@@ -211,32 +306,5 @@ feed_comp_indicator.set(0.5)
 level_indicator.set("CONSTANT")
 
 
-reactor_temp_indicator.set(str(sol.y[1][-1]))
-cool_temp_out_indicator.set(str(sol.y[2][-1]))
-exit_comp_indicator.set(str(sol.y[0][-1]))
-
-print(sol.y)
-
-# history_df = pd.DataFrame(columns=['time', 'volume', 'bulk_a_comp'])
-#
-# sol = scipy.integrate.solve_ivp(coupled_system, [0, 1], [level, bulk_a_comp])
-# history_df = pd.DataFrame({'time': sol.t, 'volume': sol.y[0], 'bulk_a_comp': sol.y[1]})
-#
-# previous_time_step = 1
-#
-# for i in range(0, 100):
-#     sol = scipy.integrate.solve_ivp(coupled_system, [0, 1],
-#                                     [history_df['volume'].iloc[-1], history_df['bulk_a_comp'].iloc[-1]])
-#     history_df = pd.concat([history_df, pd.DataFrame({'time': [previous_time_step + x for x in sol.t[1:]],
-#                                                       'volume': sol.y[0][1:], 'bulk_a_comp': sol.y[1][1:]})])
-#     previous_time_step += 1
-#     print(history_df.tail(1))
-#
-#     update_plot(history_df)
-#     time.sleep(1)
-#     window.update()
-
 while(True):
     window.update()
-
-# window.mainloop()

@@ -5,7 +5,7 @@ import pickle as pkl
 import math
 import pandas as pd
 import time
-
+from tkinter import filedialog
 from PIL import ImageTk, Image
 import tkinter as tk
 from tkinter import ttk
@@ -13,8 +13,9 @@ import multiprocessing as mp
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
-
 df = pd.DataFrame(columns=['flow101', 'flow100', 'cooling_temp', 'reactor_temp', 'feed_temp', 'exit_temp', 'level', 'exit_composition', 'feed_composition'])
+
+history_df = pd.DataFrame(columns=['time', 'bulk_a_comp', 'reactor_temp', 'jacket_temp_out'])
 
 # Create tkinter window
 window = tk.Tk()
@@ -37,28 +38,48 @@ def start_timer():
     print("Simulation Started")
     run_simulation()
 
+def save_as():
+    global history_df
+    filename = filedialog.asksaveasfilename(defaultextension=".csv")
+    if filename:
+        history_df.to_csv(filename, index=False)
+
+def show_menu(event):
+    file_menu.post(event.x_root, event.y_root)
+
+file_menu = tk.Menu(window, tearoff=0)
+file_menu.add_command(label="Save As", command=save_as)
+
+def open_disturbances_window():
+    disturbances_window = tk.Toplevel(window)
+    disturbances_window.title("Disturbances")
+    disturbances_window.geometry("400x400")
+    disturbances_window.resizable(False, False)
+
+file_menu.add_command(label="Disturbances", command=open_disturbances_window)
 
 def run_simulation():
+    global history_df
     start_time = time.time()
-    update_time()
+    time_now = update_time()
     # history_df = pd.DataFrame(columns=['time', 'bulk_a_comp', 'reactor_temp', 'jacket_temp_out'])
 
     bulk_comp_a = 0
     reactor_temp = 300
     temperate_jacket_out = 300
 
-    sol = scipy.integrate.solve_ivp(system_of_equations, [0, 1], [bulk_comp_a, reactor_temp, temperate_jacket_out], args=(feed_flow,))
+    sol = scipy.integrate.solve_ivp(system_of_equations, [0, 1], [bulk_comp_a, reactor_temp, temperate_jacket_out], args=(feed_flow, jack_feed_flow))
     history_df = pd.DataFrame(
-        {'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})
+        {'time': start_time,'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})
 
     previous_time_step = 1
 
     for i in range(0, 1000000):
         sol = scipy.integrate.solve_ivp(system_of_equations, [0, 1],
                                         [history_df['bulk_a_comp'].iloc[-1], history_df['reactor_temp'].iloc[-1],
-                                         history_df['jacket_temp_out'].iloc[-1]], args=(feed_flow,))
+                                         history_df['jacket_temp_out'].iloc[-1]], args=(feed_flow, jack_feed_flow))
         history_df = pd.concat([history_df, pd.DataFrame(
-            {'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})])
+            {"time": time_now, 'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})])
         previous_time_step += 1
         print(history_df.tail(1))
 
@@ -77,7 +98,7 @@ def update_time():
     # print(elapsed_time)
     window.after(1000, update_time)  # Schedule the function to be called again after 1 second
 
-
+    return elapsed_time
 
 
 def open_f101_valve():
@@ -109,11 +130,11 @@ def open_f101_valve():
 def open_f100_valve():
 
     def set_flow_rate():
-        global feed_flow
+        global jack_feed_flow
         flow_rate = fc100_flow_entry.get()
         print("Flow Rate Set to: ", flow_rate)
         flow100_indicator.set(flow_rate)
-        feed_flow = float(flow_rate)
+        jack_feed_flow = float(flow_rate)
         # fc101_control_window.destroy()
 
     print("Opening FC100 Valve Control Window")
@@ -135,6 +156,8 @@ def open_f100_valve():
 
 file_button = tk.Button(taskbar, text="File", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",)
 file_button.grid(row=0, column=0, sticky="w")
+
+file_button.bind("<Button-1>", show_menu)
 
 edit_button = tk.Button(taskbar, text="Edit", width=8, height=2, bg="white", fg="black", font="Arial 12 bold")
 edit_button.grid(row=0, column=1, sticky="w")
@@ -256,7 +279,7 @@ jack_feed_flow = 0.1 # m^3 / s
 
 # jacket_volume = 0.1 # m^3
 
-def system_of_equations(t,y, feed_flow):
+def system_of_equations(t,y, feed_flow, jack_feed_flow):
     # y[0] = bulk_a_comp
     # y[1] = reactor_temp
     # y[2] = temperature_jacket_out
@@ -280,7 +303,7 @@ def system_of_equations(t,y, feed_flow):
     density = 0.1 # kg / m^3
     heat_capacity = 0.1 # J / kg K
 
-    jacket_flow = 0.1 # m^3 / s
+    jacket_flow = jack_feed_flow # m^3 / s
 
     # Differential Equations
     dCadt = ((feed_flow / reactor_volume * (feed_a_comp)) - (feed_flow / reactor_volume * y[0])

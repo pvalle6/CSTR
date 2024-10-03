@@ -12,26 +12,44 @@ from tkinter import ttk
 import multiprocessing as mp
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+import webbrowser
 
-df = pd.DataFrame(columns=['flow101', 'flow100', 'cooling_temp', 'reactor_temp', 'feed_temp', 'exit_temp', 'level', 'exit_composition', 'feed_composition'])
-
+# Setting up dataframes for simulation
+simulation_data = pd.DataFrame(columns=['flow101', 'flow100', 'cooling_temp', 'reactor_temp', 'feed_temp', 'exit_temp', 'level', 'exit_composition', 'feed_composition'])
 history_df = pd.DataFrame(columns=['time', 'bulk_a_comp', 'reactor_temp', 'jacket_temp_out'])
 
-# Create tkinter window
+
+
+
+# Base GUI Tkinter Setup
+# TODO: Reorganize this into a application that is initialized on startup
 window = tk.Tk()
-# window.geometry("800x700")
 window.resizable(False, False)
 
+# TODO: Add a splash/startup screen for setting initial parameters as well as loading older simulations or settings.
+
+# Creates the Taskbar at the top of the simulation window
 taskbar = tk.Frame(window, height=40)
 taskbar.grid(sticky="w")
 
+# Settings a boolean that controls the dynamic simulation
+# TODO: Reorganize simulation runs into classes that have the parameters a properties
 stopped = True
+
 def stop_simulation():
+    """
+    This function stops the simulation of the CSTR in dynamic mode.
+    :return:
+    """
     global stopped
     stopped = True
     print("Simulation Stopped")
 
 def start_timer():
+    """
+    This function starts the simulation of the CSTR in dynamic mode. It also resets the time.
+    :return:
+    """
     global stopped
     stopped = False
 
@@ -39,18 +57,31 @@ def start_timer():
     run_simulation()
 
 def save_as():
+    """
+    This function saves the simulation data to a CSV file.
+    :return:
+    """
     global history_df
     filename = filedialog.asksaveasfilename(defaultextension=".csv")
     if filename:
         history_df.to_csv(filename, index=False)
 
 def show_menu(event):
+    """
+    This function shows the file menu when the file button is clicked.
+    :param event:
+    :return:
+    """
     file_menu.post(event.x_root, event.y_root)
 
 file_menu = tk.Menu(window, tearoff=0)
 file_menu.add_command(label="Save As", command=save_as)
 
 def open_disturbances_window():
+    """
+    This function opens the disturbances window.
+    :return:
+    """
     disturbances_window = tk.Toplevel(window)
     disturbances_window.title("Disturbances")
     disturbances_window.geometry("400x400")
@@ -58,8 +89,23 @@ def open_disturbances_window():
 
 file_menu.add_command(label="Disturbances", command=open_disturbances_window)
 
+def open_github():
+    webbrowser.open('https://github.com/pvalle6/CSTR')
+
+def open_linkedin():
+    webbrowser.open('https://www.linkedin.com/in/peter-v-334609211')
+
+def open_pse():
+    webbrowser.open('https://pse.che.lsu.edu/')
 def run_simulation():
+    """
+    This function runs the simulation of the CSTR in dynamic mode.
+
+    :return:
+    """
     global history_df
+    global simulation_data
+
     start_time = time.time()
     time_now = update_time()
     # history_df = pd.DataFrame(columns=['time', 'bulk_a_comp', 'reactor_temp', 'jacket_temp_out'])
@@ -80,8 +126,14 @@ def run_simulation():
                                          history_df['jacket_temp_out'].iloc[-1]], args=(feed_flow, jack_feed_flow))
         history_df = pd.concat([history_df, pd.DataFrame(
             {"time": time_now, 'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})])
+
+        simulation_data = pd.concat([simulation_data, pd.DataFrame(
+            {"flow101": flow101_indicator.get(), "flow100": flow100_indicator.get(), "cooling_temp": cw_temp_indicator.get(),
+             "reactor_temp": reactor_temp_indicator.get(), "feed_temp": feed_temp_indicator.get(), "exit_temp": exit_temp_indicator.get(),
+             "level": level_indicator.get(), "exit_composition": exit_comp_indicator.get(), "feed_composition": feed_comp_indicator.get()}, index=[0])])
+
         previous_time_step += 1
-        print(history_df.tail(1))
+        # print(history_df.tail(1))
 
         reactor_temp_indicator.set(str(round(sol.y[1][-1], 2)) + " K")
         cool_temp_out_indicator.set(str(round(sol.y[2][-1], 2)) + " K")
@@ -92,6 +144,10 @@ def run_simulation():
             break
 
 def update_time():
+    """
+    This function updates the time in the GUI.
+    :return:
+    """
     elapsed_time = str(int(time.time() - start_time))  # Get the number of seconds since the start
     clock = "Time Elapsed: " + elapsed_time + " seconds"
     time_var.set(clock)  # Update the time_var with the new time
@@ -100,9 +156,11 @@ def update_time():
 
     return elapsed_time
 
-
 def open_f101_valve():
-
+    """
+    This function opens the FC101 Valve Control Window.
+    :return:
+    """
     def set_flow_rate():
         global feed_flow
         flow_rate = fc101_flow_entry.get()
@@ -128,7 +186,10 @@ def open_f101_valve():
     fc101_set_button.grid(row=1, column=0, columnspan=2)
 
 def open_f100_valve():
-
+    """
+    This function opens the FC100 Valve Control Window.
+    :return:
+    """
     def set_flow_rate():
         global jack_feed_flow
         flow_rate = fc100_flow_entry.get()
@@ -154,6 +215,7 @@ def open_f100_valve():
     fc100_set_button.grid(row=1, column=0, columnspan=2)
 
 
+# Here is many of the buttons are initialized and placed on the taskbar
 file_button = tk.Button(taskbar, text="File", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",)
 file_button.grid(row=0, column=0, sticky="w")
 
@@ -176,35 +238,36 @@ stop_button.grid(row=0, column=3, sticky="w")
 help_button = tk.Button(taskbar, text="Help", width=8, height=2, bg="white", fg="black", font="Arial 12 bold")
 help_button.grid(row=0, column=4, sticky="w")
 
+help_menu = tk.Menu(window, tearoff=0)
+help_menu.add_command(label="GitHub", command=open_github)
+help_menu.add_command(label="Linkedin", command=open_linkedin)
+help_menu.add_command(label="PSE", command=open_pse)
 
+def show_help_menu(event):
+    help_menu.post(event.x_root, event.y_root)
+
+help_button.bind("<Button-1>", show_help_menu)
 # title = tk.Label(taskbar, text="CSTR Simulation", font="Arial 16 bold", fg="black")
 # title.grid(row=1)
 
+# Here is where the Process Simulation Window is initialized
 frame = tk.Frame(window)
 frame.grid()
-
+# Setting up GUI Images
+circle_image = tk.PhotoImage(file="reactor_image/circle.png")
+img = Image.open("reactor_image/test_2.png")
+photo = ImageTk.PhotoImage(img)
+diagram = tk.Label(frame, image=photo)
+diagram.grid()
 start_time = time.time()  # Get the time at the start of the program
-
 time_var = tk.StringVar()  # Create a StringVar to hold the time
-
-# Create a Label to display the time
 time_label = tk.Label(taskbar, textvariable=time_var)
 time_label.grid(row=0,column=5)  # Adjust the position as needed
 
-
-
-# Setting up the Control Interface
-img = Image.open("reactor_image/test_2.png")
-
-photo = ImageTk.PhotoImage(img)
-
-diagram = tk.Label(frame, image=photo)
-diagram.grid()
-
+# Setting up the Control Interface for the CSTR
 fc100_button = tk.Button(frame, text="FC100", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
                     relief="raised", borderwidth=2, command=open_f100_valve)
 fc100_button.place(x=20, y=285)
-
 fc101_button = tk.Button(frame, text="FC101", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
                     relief="raised", borderwidth=2, command=open_f101_valve)
 fc101_button.place(x=500, y=115)
@@ -212,6 +275,55 @@ fc101_button.place(x=500, y=115)
 # fc102_button = tk.Button(frame, text="FC102", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
 #                     relief="raised", borderwidth=2)
 # fc102_button.place(x=592, y=325)
+
+# Here is where many of the sensor display and GUI elements are initialized
+def on_feed_comp_sensor(x):
+    print("Opening Feed Composition Sensor Window")
+
+feed_c_button = tk.Button(frame, image=circle_image, text="FC", compound="center", bg="white",
+                          fg="black", font="Arial 12 bold", border=0, relief="raised")
+feed_c_button.config(command=lambda: on_feed_comp_sensor(1))
+feed_c_button.place(x=410, y=255)
+
+def on_feed_temp_sensor(x):
+    print("Opening Feed Temperature Sensor Window")
+
+feed_t_button = tk.Button(frame, image=circle_image, text="FT", compound="center", bg="white",
+                          fg="black", font="Arial 12 bold", border=0, relief="raised")
+feed_t_button.config(command=lambda: on_feed_temp_sensor(1))
+feed_t_button.place(x=375, y=12)
+
+def on_coolant_temp_sensor(x):
+    print("Opening Coolant Temperature Sensor Window")
+
+cool_t_button = tk.Button(frame, image=circle_image, text="CT", compound="center", bg="white",
+                          fg="black", font="Arial 12 bold", border=0, relief="raised")
+cool_t_button.config(command=lambda: on_coolant_temp_sensor(1))
+cool_t_button.place(x=105, y=192)
+
+def on_reactor_temp_sensor(x):
+    print("Opening Reactor Temperature Sensor Window")
+
+reactor_t_button = tk.Button(frame, image=circle_image, text="RT", compound="center", bg="white",
+                          fg="black", font="Arial 12 bold", border=0, relief="raised")
+reactor_t_button.config(command=lambda: on_reactor_temp_sensor(1))
+reactor_t_button.place(x=90, y=510)
+
+def on_jacket_temp_sensor(x):
+    print("Opening Jacket Temperature Sensor Window")
+
+jacket_t_button = tk.Button(frame, image=circle_image, text="TC Out", compound="center", bg="white",
+                          fg="black", font="Arial 12 bold", border=0, relief="raised")
+jacket_t_button.config(command=lambda: on_jacket_temp_sensor(1))
+jacket_t_button.place(x=505, y=300)
+
+def on_exit_comp_sensor(x):
+    print("Opening Exit Composition Sensor Window")
+
+exit_c_button = tk.Button(frame, image=circle_image, text="Cout", compound="center", bg="white",
+                          fg="black", font="Arial 12 bold", border=0, relief="raised")
+exit_c_button.config(command=lambda: on_exit_comp_sensor(1))
+exit_c_button.place(x=680, y=510)
 
 flow100_indicator = tk.StringVar()
 flow100_indicator.set("0")
@@ -231,12 +343,12 @@ cooling_temp_label.place(x=180, y=210)
 reactor_temp_indicator = tk.StringVar()
 reactor_temp_indicator.set("0")
 reactor_temp_label = tk.Label(frame, textvariable=reactor_temp_indicator, font="Arial 12 bold")
-reactor_temp_label.place(x=70, y=500)
+reactor_temp_label.place(x=70, y=487)
 
 feed_temp_indicator = tk.StringVar()
 feed_temp_indicator.set("0")
 feed_temp_label = tk.Label(frame, textvariable=feed_temp_indicator, font="Arial 12 bold")
-feed_temp_label.place(x=450, y=20)
+feed_temp_label.place(x=460, y=20)
 
 exit_temp_indicator = tk.StringVar()
 exit_temp_indicator.set("0")
@@ -251,7 +363,7 @@ level_label.place(x=450, y=500)
 exit_comp_indicator = tk.StringVar()
 exit_comp_indicator.set("0")
 exit_composition_label = tk.Label(frame, textvariable=exit_comp_indicator, font="Arial 12 bold")
-exit_composition_label.place(x=670, y=500)
+exit_composition_label.place(x=670, y=470)
 
 feed_comp_indicator = tk.StringVar()
 feed_comp_indicator.set("0")
@@ -262,11 +374,6 @@ cool_temp_out_indicator = tk.StringVar()
 cool_temp_out_indicator.set("0")
 cool_temp_out_label = tk.Label(frame, textvariable=cool_temp_out_indicator, font="Arial 12 bold")
 cool_temp_out_label.place(x=550, y=270)
-
-# Tank Specifications
-# tank_diameter = 0.5 # m
-# tank_height = 1 # m
-# tank_volume = math.pi * (tank_diameter/2)**2 * tank_height
 
 # Feed Specifications
 feed_comp_a = 0 # mol / m^3
@@ -321,13 +428,13 @@ def system_of_equations(t,y, feed_flow, jack_feed_flow):
 
     return [dCadt, dTdt, dTjdt]
 
+# Setting up the initial values for the simulation
 flow101_indicator.set(0.1)
 flow100_indicator.set(0.1)
 cw_temp_indicator.set(300)
 feed_temp_indicator.set(300)
 feed_comp_indicator.set(0.5)
 level_indicator.set("CONSTANT")
-
 
 while(True):
     window.update()

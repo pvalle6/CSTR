@@ -3,6 +3,8 @@
 ## Overview
 This project provides a Python-based simulation and control room GUI for a Continuous Stirred Tank Reactor (CSTR). The CSTR is a common type of chemical reactor used in industrial processes where maintaining uniform composition and temperature is essential. This tool aims to simulate the behavior of a CSTR and provide a user-friendly interface for monitoring and controlling the reactor parameters.
 
+![image](https://github.com/user-attachments/assets/65f6b5c8-e19d-4bea-bd12-65f43a97d098)
+
 ## Features
 Dynamic Simulation: Simulate the dynamic behavior of a CSTR under various operating conditions.
 

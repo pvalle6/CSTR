@@ -364,16 +364,18 @@ def open_f100_valve():
 #         exit_comp_canvas.draw()
 
 # TODO: Refactor this into a function that creates a sensor button
+#
+# def create_sensor_button(frame_, image, text, x, y, command):
+#     button = tk.Button(frame_, image=image, text=text, compound="center", bg="white",
+#                        fg="black", font="Arial 12 bold", border=0, relief="raised")
+#     button.config(command=command)
+#     button.place(x=x, y=y)
+#     return button
 
-def create_sensor_button(frame_, image, text, x, y, command):
-    button = tk.Button(frame_, image=image, text=text, compound="center", bg="white",
-                       fg="black", font="Arial 12 bold", border=0, relief="raised")
-    button.config(command=command)
-    button.place(x=x, y=y)
-    return button
 
-
-def open_sensor_graph(sensor_name, data=simulation_data):
+def open_sensor_graph(sensor_name):
+    global simulation_data
+    data = simulation_data
     print(f"Opening {sensor_name} Sensor Window")
     sensor_window = tk.Toplevel(window)
     sensor_window.title(f"{sensor_name} Sensor")
@@ -388,6 +390,24 @@ def open_sensor_graph(sensor_name, data=simulation_data):
     sensor_canvas = FigureCanvasTkAgg(sensor_graph, sensor_window)
     sensor_canvas.get_tk_widget().pack()
     sensor_canvas.draw()
+
+    def update_graph():
+
+        # Clear the existing plot
+        sensor_plot.clear()
+
+        # Redraw the plot with updated data
+        sensor_plot.plot(simulation_data["time"], simulation_data[sensor_name])
+        sensor_plot.set_xlabel("Time (s)")
+        sensor_plot.set_ylabel(f"{sensor_name} (units)")
+
+        # Redraw the canvas
+        sensor_canvas.draw()
+
+        # Schedule the next update
+        sensor_window.after(1000, update_graph)  # Update every 1 second
+
+    update_graph()
 
 
 # Here is many of the buttons are initialized and placed on the taskbar
@@ -457,8 +477,8 @@ fc101_button.place(x=500, y=115)
 
 """
 ['time', 'flow101', 'flow100', 'cooling_temp', 'reactor_temp', 'feed_temp',
-                                        'exit_temp', 'level', 'exit_composition', 'feed_composition', 'jacket_temp_out']
-                                        """
+                                        'exit_temp', 'level', 'exit_composition', 'feed_composition', 'jacket_temp_out'
+"""
 
 
 def on_feed_comp_sensor(x):

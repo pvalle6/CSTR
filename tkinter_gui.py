@@ -15,11 +15,22 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 import webbrowser
 
 # Setting up dataframes for simulation
-simulation_data = pd.DataFrame(columns=['flow101', 'flow100', 'cooling_temp', 'reactor_temp', 'feed_temp', 'exit_temp', 'level', 'exit_composition', 'feed_composition'])
+simulation_data = pd.DataFrame(columns=['time', 'flow101', 'flow100', 'cooling_temp', 'reactor_temp', 'feed_temp',
+                                        'exit_temp', 'level', 'exit_composition', 'feed_composition', 'jacket_temp_out'])
+
 history_df = pd.DataFrame(columns=['time', 'bulk_a_comp', 'reactor_temp', 'jacket_temp_out'])
 
+# Feed Specifications
+feed_comp_a = 0 # mol / m^3
+feed_comp_b = 0 # mol / m^3
+feed_flow = 0.1 # m^3 / s
+feed_temp = 300 # K
 
+# Jacket Specifications
+jacket_temp_in = 280 # K
+jack_feed_flow = 0.1 # m^3 / s
 
+# jacket_volume = 0.1 # m^3
 
 # Base GUI Tkinter Setup
 # TODO: Reorganize this into a application that is initialized on startup
@@ -66,6 +77,13 @@ def save_as():
     if filename:
         history_df.to_csv(filename, index=False)
 
+def print_simulation_data():
+    """
+    This function prints the simulation data to the console.
+    :return:
+    """
+    print(simulation_data)
+
 def show_menu(event):
     """
     This function shows the file menu when the file button is clicked.
@@ -76,6 +94,14 @@ def show_menu(event):
 
 file_menu = tk.Menu(window, tearoff=0)
 file_menu.add_command(label="Save As", command=save_as)
+
+def show_view_menu(event):
+    view_menu.post(event.x_root, event.y_root)
+
+view_menu = tk.Menu(window, tearoff=0)
+view_menu.add_command(label="Print Simulation Data", command=print_simulation_data)
+
+
 
 def open_disturbances_window():
     """
@@ -107,7 +133,7 @@ def run_simulation():
     global simulation_data
 
     start_time = time.time()
-    time_now = update_time()
+    time_now = 0
     # history_df = pd.DataFrame(columns=['time', 'bulk_a_comp', 'reactor_temp', 'jacket_temp_out'])
 
     bulk_comp_a = 0
@@ -116,7 +142,7 @@ def run_simulation():
 
     sol = scipy.integrate.solve_ivp(system_of_equations, [0, 1], [bulk_comp_a, reactor_temp, temperate_jacket_out], args=(feed_flow, jack_feed_flow))
     history_df = pd.DataFrame(
-        {'time': start_time,'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})
+        {'time': 0,'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})
 
     previous_time_step = 1
 
@@ -128,9 +154,10 @@ def run_simulation():
             {"time": time_now, 'bulk_a_comp': sol.y[0], "reactor_temp": sol.y[1], "jacket_temp_out": sol.y[2]})])
 
         simulation_data = pd.concat([simulation_data, pd.DataFrame(
-            {"flow101": flow101_indicator.get(), "flow100": flow100_indicator.get(), "cooling_temp": cw_temp_indicator.get(),
+            {"time": time_now, "flow101": flow101_indicator.get(), "flow100": flow100_indicator.get(), "cooling_temp": cw_temp_indicator.get(),
              "reactor_temp": reactor_temp_indicator.get(), "feed_temp": feed_temp_indicator.get(), "exit_temp": exit_temp_indicator.get(),
-             "level": level_indicator.get(), "exit_composition": exit_comp_indicator.get(), "feed_composition": feed_comp_indicator.get()}, index=[0])])
+             "level": level_indicator.get(), "exit_composition": exit_comp_indicator.get(), "feed_composition": feed_comp_indicator.get(),
+             "jacket_temp_out": sol.y[2][-1]}, index=[0])])
 
         previous_time_step += 1
         # print(history_df.tail(1))
@@ -138,8 +165,9 @@ def run_simulation():
         reactor_temp_indicator.set(str(round(sol.y[1][-1], 2)) + " K")
         cool_temp_out_indicator.set(str(round(sol.y[2][-1], 2)) + " K")
         exit_comp_indicator.set(str(round(sol.y[0][-1], 2)) + " mol / m^3")
-        time.sleep(0.01)
         window.update()
+        time_now = time.time() - start_time
+        time.sleep(0.001)
         if stopped:
             break
 
@@ -152,7 +180,7 @@ def update_time():
     clock = "Time Elapsed: " + elapsed_time + " seconds"
     time_var.set(clock)  # Update the time_var with the new time
     # print(elapsed_time)
-    window.after(1000, update_time)  # Schedule the function to be called again after 1 second
+    # window.after(1000, update_time)  # Schedule the function to be called again after 1 second
 
     return elapsed_time
 
@@ -215,6 +243,105 @@ def open_f100_valve():
     fc100_set_button.grid(row=1, column=0, columnspan=2)
 
 
+def open_sensor_graph(sensor_name):
+    """
+    This function opens a graph of a particular sensor's data.
+    :return:
+    """
+    print("Opening Sensor Graph")
+
+    if sensor_name == "Feed Composition":
+        feed_comp_window = tk.Toplevel(window)
+        feed_comp_window.title("Feed Composition Sensor")
+        feed_comp_window.geometry("450x450")
+        # feed_comp_window.resizable(False, False)
+
+        feed_comp_graph = Figure(figsize=(5, 4), dpi=100)
+        feed_comp_plot = feed_comp_graph.add_subplot(111)
+        feed_comp_plot.plot(simulation_data["time"], simulation_data['feed_composition'])
+        feed_comp_plot.set_xlabel("Time (s)")
+        feed_comp_plot.set_ylabel("Concentration (mol/m^3)")
+        feed_comp_canvas = FigureCanvasTkAgg(feed_comp_graph, feed_comp_window)
+        feed_comp_canvas.get_tk_widget().pack()
+        feed_comp_canvas.draw()
+
+    elif sensor_name == "Feed Temperature":
+        feed_temp_window = tk.Toplevel(window)
+        feed_temp_window.title("Feed Temperature Sensor")
+        feed_temp_window.geometry("450x450")
+        # feed_temp_window.resizable(False, False)
+
+        feed_temp_graph = Figure(figsize=(5, 4), dpi=100)
+        feed_temp_plot = feed_temp_graph.add_subplot(111)
+        feed_temp_plot.plot(simulation_data["time"], simulation_data['feed_temp'])
+        feed_temp_plot.set_xlabel("Time (s)")
+        feed_temp_plot.set_ylabel("Feed Temperature (K)")
+        feed_temp_canvas = FigureCanvasTkAgg(feed_temp_graph, feed_temp_window)
+        feed_temp_canvas.get_tk_widget().pack()
+        feed_temp_canvas.draw()
+
+    elif sensor_name == "Coolant Temperature":
+        cool_temp_window = tk.Toplevel(window)
+        cool_temp_window.title("Coolant Temperature Sensor")
+        cool_temp_window.geometry("450x450")
+        # cool_temp_window.resizable(False, False)
+
+        cool_temp_graph = Figure(figsize=(5, 4), dpi=100)
+        cool_temp_plot = cool_temp_graph.add_subplot(111)
+        cool_temp_plot.plot(simulation_data["time"], simulation_data['cooling_temp'])
+        cool_temp_plot.set_xlabel("Time (s)")
+        cool_temp_plot.set_ylabel("Coolant Temperature (K)")
+        cool_temp_canvas = FigureCanvasTkAgg(cool_temp_graph, cool_temp_window)
+        cool_temp_canvas.get_tk_widget().pack()
+        cool_temp_canvas.draw()
+
+    elif sensor_name == "Reactor Temperature":
+        reactor_temp_window = tk.Toplevel(window)
+        reactor_temp_window.title("Reactor Temperature Sensor")
+        reactor_temp_window.geometry("450x450")
+        # reactor_temp_window.resizable(False, False)
+
+        reactor_temp_graph = Figure(figsize=(5, 4), dpi=100)
+        reactor_temp_plot = reactor_temp_graph.add_subplot(111)
+        reactor_temp_plot.plot(simulation_data["time"], simulation_data['reactor_temp'])
+        reactor_temp_plot.set_xlabel("Time (s)")
+        reactor_temp_plot.set_ylabel("Reactor Temperature (K)")
+
+        reactor_temp_canvas = FigureCanvasTkAgg(reactor_temp_graph, reactor_temp_window)
+        reactor_temp_canvas.get_tk_widget().pack()
+        reactor_temp_canvas.draw()
+
+    elif sensor_name == "Jacket Temperature":
+        jacket_temp_window = tk.Toplevel(window)
+        jacket_temp_window.title("Jacket Temperature Sensor")
+        jacket_temp_window.geometry("450x450")
+        # jacket_temp_window.resizable(False, False)
+
+        jacket_temp_graph = Figure(figsize=(5, 4), dpi=100)
+        jacket_temp_plot = jacket_temp_graph.add_subplot(111)
+        jacket_temp_plot.plot(simulation_data["time"], simulation_data['jacket_temp_out'])
+        jacket_temp_plot.set_xlabel("Time (s)")
+        jacket_temp_plot.set_ylabel("Jacket Temperature (K)")
+        jacket_temp_canvas = FigureCanvasTkAgg(jacket_temp_graph, jacket_temp_window)
+        jacket_temp_canvas.get_tk_widget().pack()
+        jacket_temp_canvas.draw()
+
+    elif sensor_name == "Exit Composition":
+        exit_comp_window = tk.Toplevel(window)
+        exit_comp_window.title("Exit Composition Sensor")
+        exit_comp_window.geometry("450x450")
+        # exit_comp_window.resizable(False, False)
+
+        exit_comp_graph = Figure(figsize=(5, 4), dpi=100)
+        exit_comp_plot = exit_comp_graph.add_subplot(111)
+        exit_comp_plot.plot(simulation_data["time"], simulation_data['exit_composition'])
+        exit_comp_plot.set_xlabel("Time (s)")
+        exit_comp_plot.set_ylabel("Exit Composition (mol/m^3)")
+        exit_comp_canvas = FigureCanvasTkAgg(exit_comp_graph, exit_comp_window)
+        exit_comp_canvas.get_tk_widget().pack()
+        exit_comp_canvas.draw()
+
+
 # Here is many of the buttons are initialized and placed on the taskbar
 file_button = tk.Button(taskbar, text="File", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",)
 file_button.grid(row=0, column=0, sticky="w")
@@ -226,7 +353,7 @@ edit_button.grid(row=0, column=1, sticky="w")
 
 view_button = tk.Button(taskbar, text="View", width=8, height=2, bg="white", fg="black", font="Arial 12 bold")
 view_button.grid(row=0, column=1, sticky="w")
-
+view_button.bind("<Button-1>", show_view_menu)
 start_button = tk.Button(taskbar, text="Start", width=8, height=2, bg="white", fg="black", font="Arial 12 bold",
                          command=start_timer)
 start_button.grid(row=0, column=2, sticky="w")
@@ -279,6 +406,7 @@ fc101_button.place(x=500, y=115)
 # Here is where many of the sensor display and GUI elements are initialized
 def on_feed_comp_sensor(x):
     print("Opening Feed Composition Sensor Window")
+    open_sensor_graph("Feed Composition")
 
 feed_c_button = tk.Button(frame, image=circle_image, text="FC", compound="center", bg="white",
                           fg="black", font="Arial 12 bold", border=0, relief="raised")
@@ -287,6 +415,7 @@ feed_c_button.place(x=410, y=255)
 
 def on_feed_temp_sensor(x):
     print("Opening Feed Temperature Sensor Window")
+    open_sensor_graph("Feed Temperature")
 
 feed_t_button = tk.Button(frame, image=circle_image, text="FT", compound="center", bg="white",
                           fg="black", font="Arial 12 bold", border=0, relief="raised")
@@ -295,6 +424,7 @@ feed_t_button.place(x=375, y=12)
 
 def on_coolant_temp_sensor(x):
     print("Opening Coolant Temperature Sensor Window")
+    open_sensor_graph("Coolant Temperature")
 
 cool_t_button = tk.Button(frame, image=circle_image, text="CT", compound="center", bg="white",
                           fg="black", font="Arial 12 bold", border=0, relief="raised")
@@ -303,6 +433,7 @@ cool_t_button.place(x=105, y=192)
 
 def on_reactor_temp_sensor(x):
     print("Opening Reactor Temperature Sensor Window")
+    open_sensor_graph("Reactor Temperature")
 
 reactor_t_button = tk.Button(frame, image=circle_image, text="RT", compound="center", bg="white",
                           fg="black", font="Arial 12 bold", border=0, relief="raised")
@@ -311,6 +442,7 @@ reactor_t_button.place(x=90, y=510)
 
 def on_jacket_temp_sensor(x):
     print("Opening Jacket Temperature Sensor Window")
+    open_sensor_graph("Jacket Temperature")
 
 jacket_t_button = tk.Button(frame, image=circle_image, text="TC Out", compound="center", bg="white",
                           fg="black", font="Arial 12 bold", border=0, relief="raised")
@@ -319,6 +451,7 @@ jacket_t_button.place(x=505, y=300)
 
 def on_exit_comp_sensor(x):
     print("Opening Exit Composition Sensor Window")
+    open_sensor_graph("Exit Composition")
 
 exit_c_button = tk.Button(frame, image=circle_image, text="Cout", compound="center", bg="white",
                           fg="black", font="Arial 12 bold", border=0, relief="raised")
@@ -375,16 +508,7 @@ cool_temp_out_indicator.set("0")
 cool_temp_out_label = tk.Label(frame, textvariable=cool_temp_out_indicator, font="Arial 12 bold")
 cool_temp_out_label.place(x=550, y=270)
 
-# Feed Specifications
-feed_comp_a = 0 # mol / m^3
-feed_comp_b = 0 # mol / m^3
-feed_flow = 0.1 # m^3 / s
 
-# Jacket Specifications
-jacket_temp_in = 300 # K
-jack_feed_flow = 0.1 # m^3 / s
-
-# jacket_volume = 0.1 # m^3
 
 def system_of_equations(t,y, feed_flow, jack_feed_flow):
     # y[0] = bulk_a_comp
@@ -429,11 +553,11 @@ def system_of_equations(t,y, feed_flow, jack_feed_flow):
     return [dCadt, dTdt, dTjdt]
 
 # Setting up the initial values for the simulation
-flow101_indicator.set(0.1)
-flow100_indicator.set(0.1)
-cw_temp_indicator.set(300)
-feed_temp_indicator.set(300)
-feed_comp_indicator.set(0.5)
+flow101_indicator.set(jack_feed_flow)
+flow100_indicator.set(feed_flow)
+cw_temp_indicator.set(jacket_temp_in)
+feed_temp_indicator.set(feed_temp)
+feed_comp_indicator.set(feed_comp_a)
 level_indicator.set("CONSTANT")
 
 while(True):

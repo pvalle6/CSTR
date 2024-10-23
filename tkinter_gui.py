@@ -15,7 +15,10 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 # , NavigationToolbar2Tk
 import webbrowser
 import random
+import threading
+import queue
 
+first_run = True
 # TODO: Multithreading
 # Setting up dataframes for simulation
 simulation_data = pd.DataFrame(columns=['time', 'flow101', 'flow100', 'cooling_temp',
@@ -58,11 +61,22 @@ def start_timer():
     This function starts the simulation of the CSTR in dynamic mode. It also resets the time.
     :return:
     """
+    global first_run
     global stopped
     stopped = False
 
     print("Simulation Started")
-    run_simulation()
+
+    if first_run:
+        first_run = False
+        threading.Thread(target=run_simulation).start()
+        print("Simulation Started")
+
+    if stopped and not first_run:
+        stopped = False
+        print("Simulation restarted")
+    else:
+        print("Simulation Already Running")
 
 
 def save_as():
@@ -115,6 +129,25 @@ def open_disturbances_window():
     disturbances_window.geometry("400x400")
     disturbances_window.resizable(False, False)
 
+    def change_feed_comp(original_value):
+        time.sleep(1)
+        data_queue.put(original_value)
+        global feed_comp_a
+        feed_comp_a = original_value
+        feed_comp_indicator.set(feed_comp_a)
+
+    def randomize_feed_comp_a():
+        global feed_comp_a
+        original_value = feed_comp_a
+        feed_comp_a = random.uniform(1.0, 3.0)  # Random value between 1.0 and 3.0
+        feed_comp_indicator.set(feed_comp_a)
+        # window.after(1000, change_feed_comp(original_value))  # Change back after 1 second
+
+        threading.Thread(target=change_feed_comp, args=(original_value,)).start()
+
+    randomize_button = tk.Button(disturbances_window, text="Randomize Feed Comp A", command=randomize_feed_comp_a)
+    randomize_button.pack(pady=20)
+
 
 file_menu.add_command(label="Disturbances", command=open_disturbances_window)
 
@@ -130,7 +163,9 @@ def open_linkedin():
 def open_pse():
     webbrowser.open('https://pse.che.lsu.edu/')
 
+
 # Feed Specifications
+
 feed_comp_a = 2.353  # kmol / m^3
 feed_flow = 1  # m^3 / s
 feed_temp = 362  # K
@@ -138,6 +173,8 @@ feed_temp = 362  # K
 # Jacket Specifications
 jacket_temp_in = 150  # K
 jack_feed_flow = 0.1  # m^3 / s
+
+data_queue = queue.Queue()
 
 
 def run_simulation():
@@ -153,7 +190,7 @@ def run_simulation():
 
     bulk_comp_a = 2.353  # kmol / m^3
     reactor_temp = 362.4  # K
-    temperate_jacket_out = 345.69  # K
+    temperate_jacket_out = 344.21  # K
 
     sol = scipy.integrate.solve_ivp(system_of_equations, [0, 0.1],
                                     [bulk_comp_a, reactor_temp, temperate_jacket_out],
@@ -174,6 +211,9 @@ def run_simulation():
 
         last_time = last_time + 0.1
 
+        while stopped:
+            time.sleep(0.001)
+
         if i % 100 == 0:
             print(i)
 
@@ -190,7 +230,9 @@ def run_simulation():
         reactor_temp_indicator.set(str(round(sol.y[1][-1], 2)) + " K")
         cool_temp_out_indicator.set(str(round(sol.y[2][-1], 2)) + " K")
         exit_comp_indicator.set(str(round(sol.y[0][-1], 2)) + " mol / m^3")
+        feed_comp_indicator.set(feed_comp_a)
         window.update()
+
 
 def open_f101_valve():
     """
@@ -385,14 +427,14 @@ def open_sensor_graph(sensor_name):
 
         # Redraw the plot with updated data
         sensor_plot.plot(simulation_data["time"], simulation_data[sensor_name])
-        sensor_plot.set_xlabel("Time (s)")
-        sensor_plot.set_ylabel(f"{sensor_name} (units)")
+        # sensor_plot.set_xlabel("Time (s)")
+        # sensor_plot.set_ylabel(f"{sensor_name} (units)")
 
         # Redraw the canvas
         sensor_canvas.draw()
 
         # Schedule the next update
-        sensor_window.after(1000, update_graph)  # Update every 1 second
+        threading.Thread(target=update_graph).start()
 
     update_graph()
 
@@ -470,7 +512,7 @@ fc101_button.place(x=500, y=115)
 
 def on_feed_comp_sensor(x):
     print("Opening Feed Composition Sensor Window")
-    open_sensor_graph("Feed Composition")
+    open_sensor_graph("feed_composition")
 
 
 feed_c_button = tk.Button(frame, image=circle_image, text="FC", compound="center", bg="white",
@@ -574,7 +616,7 @@ exit_composition_label = tk.Label(frame, textvariable=exit_comp_indicator, font=
 exit_composition_label.place(x=670, y=470)
 
 feed_comp_indicator = tk.StringVar()
-feed_comp_indicator.set("0.1")
+feed_comp_indicator.set(feed_comp_a)
 feed_composition_label = tk.Label(window, textvariable=feed_comp_indicator, font="Arial 12 bold")
 feed_composition_label.place(x=450, y=270)
 
@@ -634,5 +676,4 @@ feed_temp_indicator.set(str(feed_temp))
 feed_comp_indicator.set(str(feed_comp_a))
 level_indicator.set("CONSTANT")
 
-while True:
-    window.update()
+window.mainloop()
